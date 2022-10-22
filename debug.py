@@ -189,7 +189,9 @@ if __name__ == '__main__':
     from skimage import io, img_as_float32
 
     # Load model
-    ckpt = "checkpoints/baseline_vox_first_order_motion/51.pth.tar"
+    # ckpt = "checkpoints/baseline_vox_first_order_motion/51.pth.tar"
+    ckpt = "checkpoints/motion_for_eth_gaze_dataset/31.pth.tar"
+
     K, G, D = load_model(ckpt = ckpt)
     K.eval()
     G.eval()
@@ -198,7 +200,7 @@ if __name__ == '__main__':
     # demo_dataset(K, G, D)
 
     # Load src and video driving
-    driving_path = "/home/ubuntu/vuthede/MonkeyNet/data/vox/test/Kathie_Lee_Gifford-lfrJYPLyYwM-19.jpg"
+    driving_path = "/home/ubuntu/vuthede/first-order-model-implementation/data/eth_motion_data/train/subject0032_cam1_sample20.png"
     # driving_path = "/home/ubuntu/vuthede/first-order-model-implementation/face_de1.png"
 
     driving = io.imread(driving_path) 
@@ -210,7 +212,9 @@ if __name__ == '__main__':
     driving = np.transpose(driving, (0,4,1,2,3))
     
     ### Src
-    src_path = "/home/ubuntu/vuthede/first-order-model-implementation/face_de.png"
+    # src_path = "/home/ubuntu/vuthede/first-order-model-implementation/face_de.png"
+    src_path = "/home/ubuntu/vuthede/first-order-model-implementation/data/eth_motion_data/train/subject0000_cam1_sample20.png"
+
     src = io.imread(src_path) 
     src = img_as_float32(src)
     src = np.moveaxis(src, 1, 0)
@@ -218,18 +222,18 @@ if __name__ == '__main__':
     src = np.moveaxis(src, 1, 2)
     src = np.expand_dims(src,0)
     src = np.transpose(src, (0,4,1,2,3))
-    src = src[:,:,25:26,:,:]
+    src = src[:,:,2:3,:,:]
 
 
     #### An image
-    # src_path = "./trinh1.png"
+    # src_path = "./trinh.png"
     # src = cv2.imread(src_path)
     # src = cv2.resize(src, (256, 256)) #BxCxDxH,W
     # src = src/255.0
     # src = np.expand_dims(np.expand_dims(src, 0), 0) # 1x1xHxWx3
     # src  = np.transpose(src, (0,4,1,2,3)) # 1x3x1x256x256
     # import pdb; pdb.set_trace();
-    out = cv2.VideoWriter(f'motion_transfer_de.mp4',cv2.VideoWriter_fourcc('M','J','P','G'), 5, (256*3, 256))
+    out = cv2.VideoWriter(f'motion_transfer_eth.mp4',cv2.VideoWriter_fourcc('M','J','P','G'), 5, (256*3, 256))
 
     s = torch.FloatTensor(src).to(device)
     dri = torch.FloatTensor(driving).to(device)

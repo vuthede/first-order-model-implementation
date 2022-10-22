@@ -299,7 +299,9 @@ if __name__ == '__main__':
 
     ################## Config for Vox
     # Dataset and dataloader
-    root_dir = "../MonkeyNet/data/vox"
+    # root_dir = "../MonkeyNet/data/vox"
+    root_dir = "./data/eth_motion_data"
+
     augmentation_params = {"flip_param" : {"horizontal_flip": True, "time_flip":True}, "jitter_param" :{"brightness":0.1, "contrast":0.1, "saturation":0.1, "hue":0.1}}
     dataset = FramesDataset(root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
                  random_seed=0, pairs_list=None, augmentation_params=augmentation_params)

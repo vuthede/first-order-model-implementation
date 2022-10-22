@@ -28,8 +28,15 @@
 # CUDA_VISIBLE_DEVICES=7 taskset --cpu-list 40-50 python3 train.py --viz_output viz_$exp_name\
 #                                             --using_first_order_motion 0\
 
-exp_name=wo_equivariance_jacobian
+# exp_name=wo_equivariance_jacobian
+# rm -rf logs/$exp_name
+# rm -rf checkpoints/$exp_name
+# CUDA_VISIBLE_DEVICES=4 taskset --cpu-list 0-20 python3 train.py --viz_output viz_$exp_name\
+#                                             --lamda_equi_jacobian_loss 0.0\
+
+
+exp_name=motion_for_eth_gaze_dataset
 rm -rf logs/$exp_name
 rm -rf checkpoints/$exp_name
-CUDA_VISIBLE_DEVICES=4 taskset --cpu-list 0-20 python3 train.py --viz_output viz_$exp_name\
-                                            --lamda_equi_jacobian_loss 0.0\
+CUDA_VISIBLE_DEVICES=5 taskset --cpu-list 20-30 python3 train.py --viz_output viz_$exp_name\
+                                      --exp_name $exp_name

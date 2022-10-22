@@ -106,14 +106,17 @@ class FramesDataset(Dataset):
             path = os.path.join(self.root_dir, name)
 
         video_name = os.path.basename(path)
-
+        # import pdb;pdb.set_trace()
         if self.is_train and os.path.isdir(path):
+            # print(path)
             frames = os.listdir(path)
             num_frames = len(frames)
             frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2))
             video_array = [img_as_float32(io.imread(os.path.join(path, frames[idx]))) for idx in frame_idx]
         else:
             video_array = read_video(path, frame_shape=self.frame_shape)
+            # if (video_array.shape != (20, 256, 256, 3)):
+            #     print(path)
             num_frames = len(video_array)
             frame_idx = np.sort(np.random.choice(num_frames, replace=True, size=2)) if self.is_train else range(
                 num_frames)
@@ -197,17 +200,23 @@ class PairedDataset(Dataset):
         return {**first, **second}
 
 if __name__ == '__main__':
-    root_dir = "../../MonkeyNet/data/vox"
-    augmentation_params = {"flip_param" : {"horizontal_flip": True, "time_flip":True}}
+    # root_dir = "../../MonkeyNet/data/vox"
+    root_dir = "../data/eth_motion_data"
+    augmentation_params = {"flip_param" : {"horizontal_flip": True, "time_flip":True}, "jitter_param" :{"brightness":0.1, "contrast":0.1, "saturation":0.1, "hue":0.1}}
 
     dataset = FramesDataset(root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
                  random_seed=0, pairs_list=None, augmentation_params=augmentation_params)
-    
+    from tqdm import tqdm
     print(f'Len dataset :{len(dataset)}')
-    data = dataset[100]
-    video = data["driving"] # 3xHxW
-    src = data["source"] # 3xHxW
-    name = data["name"]
-    import pdb; pdb.set_trace();
-    print(f'Driving :{video.shape}, src shape :{src.shape}, name: {name}')
+    for d in dataset:
+        pass
+        # print(d["driving"].shape, d["source"].shape)
+   
+   
+    # data = dataset[100]
+    # video = data["driving"] # 3xHxW
+    # src = data["source"] # 3xHxW
+    # name = data["name"]
+    # import pdb; pdb.set_trace();
+    # print(f'Driving :{video.shape}, src shape :{src.shape}, name: {name}')
 
