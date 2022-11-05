@@ -59,7 +59,12 @@ class DenseMotionNetwork(nn.Module):
             coordinate_grid = torch.matmul(jacobian, coordinate_grid.unsqueeze(-1))
             coordinate_grid = coordinate_grid.squeeze(-1)
 
+        # print(kp_source['jacobian'], kp_driving['jacobian'])
         driving_to_source = coordinate_grid + kp_source['value'].view(bs, self.num_kp, 1, 1, 2)
+
+        # print(torch.max(driving_to_source), torch.min(driving_to_source))
+        # print(torch.max(kp_source['value']), torch.min(kp_source['value']))
+        # print(torch.max(kp_source['jacobian']), torch.min(kp_source['jacobian']))
 
         #adding background feature
         identity_grid = identity_grid.repeat(bs, 1, 1, 1, 1)
@@ -87,6 +92,8 @@ class DenseMotionNetwork(nn.Module):
         out_dict = dict()
         heatmap_representation = self.create_heatmap_representations(source_image, kp_driving, kp_source)
         sparse_motion = self.create_sparse_motions(source_image, kp_driving, kp_source)
+        out_dict['sparse_motion'] = sparse_motion
+
         deformed_source = self.create_deformed_source_image(source_image, sparse_motion)
         out_dict['sparse_deformed'] = deformed_source
 

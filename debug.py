@@ -100,7 +100,9 @@ def visualize(x, x_prime, x_prime_hat, x_prime_hat1, kp_src, kp_driving, output_
             cv2.imwrite(f'{output_vis}/batch{batch}_sample{i}.png', img)
 
 
-def vis(x, x_prime, x_prime_hat, kp_src, kp_driving):
+def vis(x, x_prime, prediction, kp_src, kp_driving):
+        from matplotlib.pylab import cm
+
         """
         x: Bx3x1xHxW
         x_prime: Bx3x1xHxW
@@ -111,20 +113,46 @@ def vis(x, x_prime, x_prime_hat, kp_src, kp_driving):
         _,_,h,w = x.shape
         x = x.detach().cpu().numpy()
         x_prime = x_prime.detach().cpu().numpy()
+        x_prime_hat = prediction["prediction"]
         x_prime_hat = x_prime_hat.detach().cpu().numpy()
+
+        sparse_deformed = prediction["sparse_deformed"]
+        sparse_motion = prediction["sparse_motion"]
+
+
 
 
         kp_src = kp_src.detach().cpu().numpy()
         kp_driving = kp_driving.detach().cpu().numpy()
 
-        for i, (x1, x2, x3, ks, kd) in enumerate(zip(x, x_prime, x_prime_hat, kp_src, kp_driving)):
+        for i, (x1, x2, x3, ks, kd, sd, sm) in enumerate(zip(x, x_prime, x_prime_hat, kp_src, kp_driving, sparse_deformed, sparse_motion)):
             x1 = (np.transpose(x1, (1,2,0))*255.0).astype(np.uint8)
 
             x2 = (np.transpose(x2, (1,2,0))*255.0).astype(np.uint8)
 
             x3 = (np.transpose(x3, (1,2,0))*255.0).astype(np.uint8)
 
-            
+            # Sparse deform
+            sdj_list = []
+            for j in range(len(ks)):
+                sdj = (sd[j].permute(1,2,0).detach().cpu().numpy()*255.0).astype(np.uint8)
+                sdj = cv2.resize(sdj, (256, 256))
+                sdj_list.append(sdj)
+
+            # Sparse motion
+            smj_list = []
+            smj_identity = sm[0].permute(2,0,1)[0].detach().cpu().numpy()
+            for j in range(1, len(ks)):
+                smj = sm[j].permute(2,0,1)[0].detach().cpu().numpy()
+                smj = (smj-smj_identity+1)
+                # smj = cm.viridis(smj)
+                smj = (smj*127)
+                # import pdb;pdb.set_trace()
+                smj = cv2.resize(smj, (256, 256))
+                smj = cv2.cvtColor(smj, cv2.COLOR_GRAY2RGB)
+                smj_list.append(smj)
+
+
             ks = (ks+1) * np.array([w,h]) / 2.0
             kd = (kd+1) * np.array([w,h]) / 2.0
 
@@ -132,7 +160,7 @@ def vis(x, x_prime, x_prime_hat, kp_src, kp_driving):
             x2 = draw_landmarks(x2, kd)
             x3 = draw_landmarks(x3, kd)
             # x4 = draw_landmarks(x4, kd)
-            img = np.hstack((x1, x2, x3))
+            img = np.hstack((x1, x2, x3, *sdj_list, *smj_list))
             return img
 
 def demo_dataset(K, G, D):
@@ -187,10 +215,13 @@ def normalize_kp(kp_source, kp_driving, kp_driving_initial, adapt_movement_scale
 
 if __name__ == '__main__':
     from skimage import io, img_as_float32
+    import imageio
 
     # Load model
     # ckpt = "checkpoints/baseline_vox_first_order_motion/51.pth.tar"
-    ckpt = "checkpoints/motion_for_eth_gaze_dataset/31.pth.tar"
+    # ckpt = "checkpoints/motion_for_eth_gaze_dataset/31.pth.tar"
+    ckpt = "checkpoints/motion_for_eth_gaze_dataset_wo_equi_jacobian/1.pth.tar"
+
 
     K, G, D = load_model(ckpt = ckpt)
     K.eval()
@@ -242,6 +273,7 @@ if __name__ == '__main__':
     dri0 = dri[:,:,0,:,:]
     kp_driving_initial = K(dri0)
 
+    img_list = []
 
     for i in range(driving.shape[2]):
         dri1 = dri[:,:,i,:,:]
@@ -256,9 +288,12 @@ if __name__ == '__main__':
 
         prediction = G(source_image=s.squeeze(2), kp_driving=kp_dri_norm, kp_source=kp_s)
 
-        img_out = vis(s.squeeze(2), dri[:,:,i,:,:], prediction["prediction"], kp_s["value"], kp_dri["value"])
+        img_out = vis(s.squeeze(2), dri[:,:,i,:,:], prediction, kp_s["value"], kp_dri["value"])
+        img_list.append(img_out)
+        
         print(img_out.shape)
-        out.write(img_out)
-    
+        # out.write(img_out)
+
+    imageio.mimsave(f'gif_out/motion.gif', img_list, fps=5)
 
     

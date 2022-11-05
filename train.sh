@@ -35,8 +35,15 @@
 #                                             --lamda_equi_jacobian_loss 0.0\
 
 
-exp_name=motion_for_eth_gaze_dataset
+# exp_name=motion_for_eth_gaze_dataset
+# rm -rf logs/$exp_name
+# rm -rf checkpoints/$exp_name
+# CUDA_VISIBLE_DEVICES=5 taskset --cpu-list 20-30 python3 train.py --viz_output viz_$exp_name\
+#                                       --exp_name $exp_name
+
+exp_name=motion_for_eth_gaze_dataset_wo_equi_jacobian
 rm -rf logs/$exp_name
 rm -rf checkpoints/$exp_name
 CUDA_VISIBLE_DEVICES=5 taskset --cpu-list 20-30 python3 train.py --viz_output viz_$exp_name\
-                                      --exp_name $exp_name
+                                      --exp_name $exp_name\
+                                      --lamda_equi_jacobian_loss 0.0

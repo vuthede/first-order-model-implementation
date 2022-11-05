@@ -23,7 +23,7 @@ import torch.optim as optim
 
 
 # Loss
-from modules.loss import GLoss, DLoss, detach_kp
+from modulesiris.loss import GLoss, DLoss, detach_kp, KEquivarianceLoss
 
 #
 import warnings
@@ -50,7 +50,9 @@ def draw_landmarks(img, lmks, color=(255,0,0)):
 
     return img
 
-def viz_prediction(x, x_prime, x_prime_hat, kp_driving, kp_src,epoch, batch, output_vis):
+def viz_prediction(x, x_prime, prediction, kp_driving, kp_src,epoch, batch, output_vis):
+    from matplotlib.pylab import cm
+    
     """
     x: Bx3xHxW
     x_prime: Bx3xHxW
@@ -61,6 +63,17 @@ def viz_prediction(x, x_prime, x_prime_hat, kp_driving, kp_src,epoch, batch, out
         os.makedirs(output_vis)
     _,_,h,w = x.shape
     
+    x_prime_hat = prediction["prediction"]
+    motion = prediction["sparse_motion"]
+    d1 = motion[0][1].detach().permute(2,0,1)[0].cpu().numpy() # left iris x
+    d2 = motion[0][2].detach().permute(2,0,1)[0].cpu().numpy() # left iris x
+    i = motion[0][0].detach().permute(2,0,1)[0].cpu().numpy() # indentity x
+    img_motion = (d2-i+1)
+    img_motion = cm.viridis(img_motion)
+
+    cv2.imwrite(f'{output_vis}/epoch{epoch}_batch{batch}_sample0_motion.png', img_motion*127)
+
+
     x = x.detach().cpu().numpy()
     x_prime = x_prime.detach().cpu().numpy()
     x_prime_hat = x_prime_hat.detach().cpu().numpy()
@@ -167,7 +180,7 @@ def train_one_epoch(G, D, K, dataloader, optimizerK, optimizerG, optimizerD, epo
     
     criterion_G = GLoss(loss_weight_dict=loss_weight_dict)
     criterion_D = DLoss(loss_weight_dict=loss_weight_dict)
-
+    criterion_K = KEquivarianceLoss(loss_weight_dict=loss_weight_dict)
 
 
     global global_iteration_step
@@ -202,7 +215,13 @@ def train_one_epoch(G, D, K, dataloader, optimizerK, optimizerG, optimizerD, epo
             loss_rec_G = loss_G_dict["loss_rec_G"]
             loss_adv_G = loss_G_dict["loss_adv_G"]
             loss_rec_vgg19_G = loss_G_dict["loss_rec_vgg19_G"]
-            loss_G_K = loss_G 
+
+            # Equivariance Loss to constrain the jacobian
+            loss_equivariance_dict = criterion_K(K=G.dense_motion_network.jacobian_estimator, x_origin=x, x_prime=x_prime, kp_src=kp_src, kp_driving=kp_driving)
+            loss_equivariance_K = loss_equivariance_dict["loss_equivariance_K"]
+            loss_G_K = loss_G + loss_equivariance_K
+            # loss_G_K = loss_G
+            logger.info(f'loss jacobinan:{loss_equivariance_K.item()}')
             loss_G_K.backward()
 
             # track_model_gradients(G, tensorboardLogger, global_iteration_step, module_name="G")
@@ -241,11 +260,12 @@ def train_one_epoch(G, D, K, dataloader, optimizerK, optimizerG, optimizerD, epo
             tensorboardLogger.log(f"train/loss_rec_G", loss_rec_G.item(), epoch*num_batch+i)
             tensorboardLogger.log(f"train/loss_adv_G", loss_adv_G.item(), epoch*num_batch+i)
             tensorboardLogger.log(f"train/loss_rec_vgg19_G", loss_rec_vgg19_G.item(), epoch*num_batch+i)
+            # tensorboardLogger.log(f"train/loss_equivariance_K", loss_equivariance_K.item(), epoch*num_batch+i)
 
 
             # logger.debug(f"Loss_g :{loss_G.item()}")
-            if i<10:
-                viz_prediction(x, x_prime, prediction["prediction"], kp_driving["value"], kp_src["value"], epoch, i, viz_output)
+            if i%20==0:
+                viz_prediction(x, x_prime, prediction, kp_driving["value"], kp_src["value"], epoch, i, viz_output)
             tepoch.update(1)
 
 
@@ -291,7 +311,7 @@ if __name__ == '__main__':
     # augmentation_params = {"flip_param" : {"horizontal_flip": True, "time_flip":True}, "jitter_param" :{"brightness":0.1, "contrast":0.1, "saturation":0.1, "hue":0.1}}
     dataset = FramesDataset(root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
                  random_seed=0, pairs_list=None, augmentation_params=augmentation_params)
-    dataloader = DataLoader(dataset, batch_size=20, shuffle=True, num_workers=8, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=10, shuffle=True, num_workers=8, drop_last=True)
     logger.info(f'Len dataloader :{len(dataloader)}')
     # Model here
     dense_motion_params = {"block_expansion":64, "max_features": 1024, "num_blocks":5, "scale_factor":0.25}
@@ -333,12 +353,12 @@ if __name__ == '__main__':
     optimizerK = None
     for epoch in range(0, MAX_EPOCH):
         train_one_epoch(G, D, K, dataloader, optimizerK, optimizerG, optimizerD, epoch, tensorboardLogger, args.viz_output, loss_weight_dict)      
-        if epoch % 10 == 0:
-            checkpoint_path = f'checkpoints/{experiment_name}/{epoch+1}.pth.tar'
-            save_checkpoint({
-                    'epoch': epoch+1,
-                    'G_state_dict': G.state_dict(),
-                    'D_state_dict': D.state_dict(),
-                    'optimizerG': optimizerG.state_dict(),
-                    'optimizerD': optimizerD.state_dict()
-                    }, filename=f'{checkpoint_path}')
+        # if epoch % 5 == 0:
+        checkpoint_path = f'checkpoints/{experiment_name}/{epoch+1}.pth.tar'
+        save_checkpoint({
+                'epoch': epoch+1,
+                'G_state_dict': G.state_dict(),
+                'D_state_dict': D.state_dict(),
+                'optimizerG': optimizerG.state_dict(),
+                'optimizerD': optimizerD.state_dict()
+                }, filename=f'{checkpoint_path}')

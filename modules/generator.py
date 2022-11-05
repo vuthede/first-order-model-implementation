@@ -69,6 +69,8 @@ class OcclusionAwareGenerator(nn.Module):
                                                      kp_source=kp_source)
             output_dict['mask'] = dense_motion['mask']
             output_dict['sparse_deformed'] = dense_motion['sparse_deformed']
+            output_dict['sparse_motion'] = dense_motion['sparse_motion']
+
 
             if 'occlusion_map' in dense_motion:
                 occlusion_map = dense_motion['occlusion_map']

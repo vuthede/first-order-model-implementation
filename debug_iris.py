@@ -19,7 +19,7 @@ device = 'cuda'
 def load_model(ckpt):
     checkpoint = torch.load(ckpt, map_location=device)
      # Model here
-    dense_motion_params = {"block_expansion":64, "max_features": 1024, "num_blocks":5, "scale_factor":0.25}
+    dense_motion_params = {"block_expansion":64, "max_features": 1024, "num_blocks":5, "scale_factor":0.25, "using_first_order_motion":0}
     G = OcclusionAwareGenerator(num_channels=3, num_kp=2, block_expansion=64, max_features=512, num_down_blocks=2,
                  num_bottleneck_blocks=6, estimate_occlusion_map=True, dense_motion_params=dense_motion_params, estimate_jacobian=True)
     
@@ -87,7 +87,7 @@ def visualize(x, x_prime, x_prime_hat, x_prime_hat1, kp_src, kp_driving, output_
             cv2.imwrite(f'{output_vis}/batch{batch}_sample{i}.png', img)
 
 
-def vis(x, x_prime_hat, kp_src, kp_driving):
+def vis(x, prediction, kp_src, kp_driving):
         """
         x: Bx3x1xHxW
         x_prime: Bx3x1xHxW
@@ -97,22 +97,39 @@ def vis(x, x_prime_hat, kp_src, kp_driving):
         """
         _,_,h,w = x.shape
         x = x.detach().cpu().numpy()
+        x_prime_hat = prediction["prediction"]
         x_prime_hat = x_prime_hat.detach().cpu().numpy()
 
+        sparse_deformed = prediction["sparse_deformed"]
+        sparse_motion = prediction["sparse_motion"]
 
         kp_src = kp_src.detach().cpu().numpy()
         kp_driving = kp_driving.detach().cpu().numpy()
 
-        for i, (x1, x3, ks, kd) in enumerate(zip(x, x_prime_hat, kp_src, kp_driving)):
+        for i, (x1, x3, ks, kd,  sd, sm) in enumerate(zip(x, x_prime_hat, kp_src, kp_driving, sparse_deformed, sparse_motion)):
             x1 = (np.transpose(x1, (1,2,0))*255.0).astype(np.uint8)
             x3 = (np.transpose(x3, (1,2,0))*255.0).astype(np.uint8)
+
+             # Sparse deform
+            sdj_list = []
+            for j in range(len(ks)):
+                sdj = (sd[j].permute(1,2,0).detach().cpu().numpy()*255.0).astype(np.uint8)
+                sdj = cv2.resize(sdj, (256, 256))
+                sdj_list.append(sdj)
+
+            # Sparse motion
+            smj_list = []
+            smj_identity = sm[0].permute(2,0,1)[0].detach().cpu().numpy()
+
+
+
             ks = (ks+1) * np.array([w,h]) / 2.0
             kd = (kd+1) * np.array([w,h]) / 2.0
             x1 = draw_landmarks(x1, ks)
             x3 = draw_landmarks(x3, ks)
             x3 = draw_landmarks(x3, kd, color=(0,255,255))
 
-            img = np.hstack((x1, x3))
+            img = np.hstack((x1, x3, *sdj_list, *smj_list))
             return img
 
 
@@ -129,7 +146,8 @@ if __name__ == '__main__':
     from skimage import io, img_as_float32
 
     # Load model
-    ckpt = "checkpoints/motion_iris/21.pth.tar"
+    # ckpt = "checkpoints/motion_iris_fix_motion_equation/21.pth.tar"
+    ckpt = "checkpoints/motion_iris_fix_motion_test_zero_order_motion/20.pth.tar"
     G = load_model(ckpt = ckpt)
     G.eval()
 
@@ -142,19 +160,19 @@ if __name__ == '__main__':
 
     out = cv2.VideoWriter(f'motion_iris.mp4',cv2.VideoWriter_fourcc('M','J','P','G'), 5, (256*2, 256))
 
-    for index in range(0,1):
-        # batchdata = dataset[index]
-        # _, x = batchdata["driving"], batchdata["source"]
-        # _, kp_src = batchdata["lmks_driving"], batchdata["lmks_source"]
+    for index in range(0,20):
+        batchdata = dataset[index]
+        _, x = batchdata["driving"], batchdata["source"]
+        _, kp_src = batchdata["lmks_driving"], batchdata["lmks_source"]
 
         # Fake image
-        src_path = "./trinh.png"
-        src = cv2.imread(src_path)
-        src = cv2.cvtColor(src, cv2.COLOR_BGR2RGB)
-        src = cv2.resize(src, (256, 256)) #BxCxDxH,W
-        src = src/255.0
-        x  = np.transpose(src, (2,0,1)) # 3x256x256
-        kp_src = {"value": torch.FloatTensor([[-0.2136181,-0.31389177],[0.373667,-0.22871798]])}
+        # src_path = "./trinh.png"
+        # src = cv2.imread(src_path)
+        # src = cv2.cvtColor(src, cv2.COLOR_BGR2RGB)
+        # src = cv2.resize(src, (256, 256)) #BxCxDxH,W
+        # src = src/255.0
+        # x  = np.transpose(src, (2,0,1)) # 3x256x256
+        # kp_src = {"value": torch.FloatTensor([[-0.2136181,-0.31389177],[0.373667,-0.22871798]])}
 
 
 
@@ -179,7 +197,7 @@ if __name__ == '__main__':
 
             prediction = G(source_image=x, kp_driving=kp_driving, kp_source=kp_src)
 
-            img_out = vis(x, prediction["prediction"], kp_src["value"], kp_driving["value"])
+            img_out = vis(x, prediction, kp_src["value"], kp_driving["value"])
             img_list.append(img_out)
         
             print(img_out.shape)
