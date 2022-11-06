@@ -19,8 +19,8 @@ device = 'cuda'
 def load_model(ckpt):
     checkpoint = torch.load(ckpt, map_location=device)
      # Model here
-    dense_motion_params = {"block_expansion":64, "max_features": 1024, "num_blocks":5, "scale_factor":0.25, "using_first_order_motion":0}
-    G = OcclusionAwareGenerator(num_channels=3, num_kp=2, block_expansion=64, max_features=512, num_down_blocks=2,
+    dense_motion_params = {"block_expansion":64, "max_features": 1024, "num_blocks":5, "scale_factor":0.25, "using_first_order_motion":0, "using_thin_plate_spline_motion":1}
+    G = OcclusionAwareGenerator(num_channels=3, num_kp=8, block_expansion=64, max_features=512, num_down_blocks=2,
                  num_bottleneck_blocks=6, estimate_occlusion_map=True, dense_motion_params=dense_motion_params, estimate_jacobian=True)
     
     G.load_state_dict(checkpoint["G_state_dict"], strict=True)
@@ -137,8 +137,10 @@ def vis(x, prediction, kp_src, kp_driving):
 def synthize_kp_driving(kp_src):
     kp_driving = {}
     kp_driving["value"] =  kp_src["value"].clone()
-    kp_driving["value"][:,:,0] = kp_driving["value"][:,:,0] +  np.random.uniform(-0.15, 0.15)
-    kp_driving["value"][:,:,1] = kp_driving["value"][:,:,1] +  np.random.uniform(-0.03, 0.03)
+    # kp_driving["value"][:,:,0] = kp_driving["value"][:,:,0] +  np.random.uniform(-0.15, 0.15)
+    # kp_driving["value"][:,:,1] = kp_driving["value"][:,:,1] +  np.random.uniform(-0.03, 0.03)
+    kp_driving["value"][:,-2:,0] = kp_driving["value"][:,-2:,0] +  np.random.uniform(-0.15, 0.15)
+    kp_driving["value"][:,-2:,1] = kp_driving["value"][:,-2:,1] +  np.random.uniform(-0.03, 0.03)
     return kp_driving
 
 
@@ -147,7 +149,10 @@ if __name__ == '__main__':
 
     # Load model
     # ckpt = "checkpoints/motion_iris_fix_motion_equation/21.pth.tar"
-    ckpt = "checkpoints/motion_iris_fix_motion_test_zero_order_motion/20.pth.tar"
+    # ckpt = "checkpoints/motion_iris_fix_motion_test_zero_order_motion/20.pth.tar"
+    # ckpt = "checkpoints/motion_iris_thin_plate_spline_motion/11.pth.tar"
+    ckpt = "checkpoints/motion_iris_thin_plate_spline_motion_more_control_points/16.pth.tar"
+
     G = load_model(ckpt = ckpt)
     G.eval()
 

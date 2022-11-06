@@ -59,7 +59,9 @@ class FramesDataset(Dataset):
       - '.mp4' or '.gif'
       - folder with all frames
     """
-    KEYPOINT_INDICES = [104, 105]  # Iris center
+    # KEYPOINT_INDICES = [104, 105]  # Iris center
+    KEYPOINT_INDICES = [0, 8, 16, 24, 32, 54, 104, 105]  # Boundary+nose points for control shape +  Iris center
+
 
     def __init__(self, root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
                  random_seed=0, pairs_list=None, augmentation_params=None):

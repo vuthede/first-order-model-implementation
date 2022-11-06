@@ -217,11 +217,11 @@ def train_one_epoch(G, D, K, dataloader, optimizerK, optimizerG, optimizerD, epo
             loss_rec_vgg19_G = loss_G_dict["loss_rec_vgg19_G"]
 
             # Equivariance Loss to constrain the jacobian
-            loss_equivariance_dict = criterion_K(K=G.dense_motion_network.jacobian_estimator, x_origin=x, x_prime=x_prime, kp_src=kp_src, kp_driving=kp_driving)
-            loss_equivariance_K = loss_equivariance_dict["loss_equivariance_K"]
-            loss_G_K = loss_G + loss_equivariance_K
-            # loss_G_K = loss_G
-            logger.info(f'loss jacobinan:{loss_equivariance_K.item()}')
+            # loss_equivariance_dict = criterion_K(K=G.dense_motion_network.jacobian_estimator, x_origin=x, x_prime=x_prime, kp_src=kp_src, kp_driving=kp_driving)
+            # loss_equivariance_K = loss_equivariance_dict["loss_equivariance_K"]
+            # loss_G_K = loss_G + loss_equivariance_K
+            loss_G_K = loss_G
+            # logger.info(f'loss jacobinan:{loss_equivariance_K.item()}')
             loss_G_K.backward()
 
             # track_model_gradients(G, tensorboardLogger, global_iteration_step, module_name="G")
@@ -289,6 +289,7 @@ if __name__ == '__main__':
     parser.add_argument('--lamda_equi_value_loss', default=10.0, type=float)
     parser.add_argument('--lamda_equi_jacobian_loss', default=10.0, type=float)
     parser.add_argument('--using_first_order_motion', default=1, type=int)
+    parser.add_argument('--using_thin_plate_spline_motion', default=0, type=int)
     parser.add_argument('--num_kp', default=10, type=int)
 
 
@@ -302,7 +303,7 @@ if __name__ == '__main__':
     
   
 
-    ################## Config for Vox
+        ################## Config for Vox
     # Dataset and dataloader
     # root_dir = "../MonkeyNet/data/vox"
     root_dir = "./data/eth_motion_data"
@@ -314,7 +315,7 @@ if __name__ == '__main__':
     dataloader = DataLoader(dataset, batch_size=10, shuffle=True, num_workers=8, drop_last=True)
     logger.info(f'Len dataloader :{len(dataloader)}')
     # Model here
-    dense_motion_params = {"block_expansion":64, "max_features": 1024, "num_blocks":5, "scale_factor":0.25}
+    dense_motion_params = {"block_expansion":64, "max_features": 1024, "num_blocks":5, "scale_factor":0.25, "using_first_order_motion":args.using_first_order_motion,"using_thin_plate_spline_motion":args.using_thin_plate_spline_motion}
     G = OcclusionAwareGenerator(num_channels=3, num_kp=args.num_kp, block_expansion=64, max_features=512, num_down_blocks=2,
                  num_bottleneck_blocks=6, estimate_occlusion_map=True, dense_motion_params=dense_motion_params, estimate_jacobian=args.using_first_order_motion)
     
