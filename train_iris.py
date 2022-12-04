@@ -23,7 +23,7 @@ import torch.optim as optim
 
 
 # Loss
-from modulesiris.loss import GLoss, DLoss, detach_kp, KEquivarianceLoss
+from modulesiris.loss import GLoss, DLoss, detach_kp, KEquivarianceLoss, mean_batch
 
 #
 import warnings
@@ -174,7 +174,7 @@ def split_kp(kp_joined, detach=False):
         kp_appearance = {k: v[:, :1] for k, v in kp_joined.items()}
     return kp_appearance, kp_video
 
-def train_one_epoch(G, D, K, dataloader, optimizerK, optimizerG, optimizerD, epoch, tensorBoardLogger, viz_output="./viz", loss_weight_dict=None):
+def train_one_epoch(G, D, K, dataloader, optimizerK, optimizerG, optimizerD, epoch, tensorBoardLogger, viz_output="./viz", loss_weight_dict=None, args=None):
     G.train()
     D.train()
     
@@ -216,11 +216,22 @@ def train_one_epoch(G, D, K, dataloader, optimizerK, optimizerG, optimizerD, epo
             loss_adv_G = loss_G_dict["loss_adv_G"]
             loss_rec_vgg19_G = loss_G_dict["loss_rec_vgg19_G"]
 
+            if args.estimate_lid_motion:
+                predict_motion_lid = prediction["driving_to_source_with_eyelid_motion_prediction"] # bsxhxwx2
+                gt_motion_lid = prediction["driving_to_source_with_eyelid_motion_groundtruth"] # bsxhxwx2
+                # import pdb; pdb.set_trace()
+                l1_lid_motion = mean_batch(torch.abs(predict_motion_lid.contiguous()-gt_motion_lid.contiguous()))
+                l1_lid_motion = torch.mean(l1_lid_motion)
+                logger.info(f'loss lidmotion:{l1_lid_motion.item()}')
+
+
             # Equivariance Loss to constrain the jacobian
             # loss_equivariance_dict = criterion_K(K=G.dense_motion_network.jacobian_estimator, x_origin=x, x_prime=x_prime, kp_src=kp_src, kp_driving=kp_driving)
             # loss_equivariance_K = loss_equivariance_dict["loss_equivariance_K"]
             # loss_G_K = loss_G + loss_equivariance_K
             loss_G_K = loss_G
+            if args.estimate_lid_motion:
+                loss_G_K = loss_G_K + l1_lid_motion
             # logger.info(f'loss jacobinan:{loss_equivariance_K.item()}')
             loss_G_K.backward()
 
@@ -290,6 +301,9 @@ if __name__ == '__main__':
     parser.add_argument('--lamda_equi_jacobian_loss', default=10.0, type=float)
     parser.add_argument('--using_first_order_motion', default=1, type=int)
     parser.add_argument('--using_thin_plate_spline_motion', default=0, type=int)
+    parser.add_argument('--estimate_lid_motion', default=0, type=int)
+
+    
     parser.add_argument('--num_kp', default=10, type=int)
 
 
@@ -312,13 +326,14 @@ if __name__ == '__main__':
     # augmentation_params = {"flip_param" : {"horizontal_flip": True, "time_flip":True}, "jitter_param" :{"brightness":0.1, "contrast":0.1, "saturation":0.1, "hue":0.1}}
     dataset = FramesDataset(root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
                  random_seed=0, pairs_list=None, augmentation_params=augmentation_params)
-    dataloader = DataLoader(dataset, batch_size=10, shuffle=True, num_workers=8, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=20, shuffle=True, num_workers=8, drop_last=True)
     logger.info(f'Len dataloader :{len(dataloader)}')
     # Model here
-    dense_motion_params = {"block_expansion":64, "max_features": 1024, "num_blocks":5, "scale_factor":0.25, "using_first_order_motion":args.using_first_order_motion,"using_thin_plate_spline_motion":args.using_thin_plate_spline_motion}
+    dense_motion_params = {"block_expansion":64, "max_features": 1024, "num_blocks":5, "scale_factor":0.25, "using_first_order_motion":args.using_first_order_motion,"using_thin_plate_spline_motion":args.using_thin_plate_spline_motion, "estimate_lid_motion":args.estimate_lid_motion}
     G = OcclusionAwareGenerator(num_channels=3, num_kp=args.num_kp, block_expansion=64, max_features=512, num_down_blocks=2,
                  num_bottleneck_blocks=6, estimate_occlusion_map=True, dense_motion_params=dense_motion_params, estimate_jacobian=args.using_first_order_motion)
     
+    # import pdb; pdb.set_trace()
     D = Discriminator(num_channels=3, block_expansion=32, num_blocks=4, max_features=512,
                 sn=True, use_kp=False, num_kp=args.num_kp, kp_variance=0.01, estimate_jacobian= args.using_first_order_motion)
     
@@ -353,7 +368,7 @@ if __name__ == '__main__':
     K = None
     optimizerK = None
     for epoch in range(0, MAX_EPOCH):
-        train_one_epoch(G, D, K, dataloader, optimizerK, optimizerG, optimizerD, epoch, tensorboardLogger, args.viz_output, loss_weight_dict)      
+        train_one_epoch(G, D, K, dataloader, optimizerK, optimizerG, optimizerD, epoch, tensorboardLogger, args.viz_output, loss_weight_dict, args)      
         # if epoch % 5 == 0:
         checkpoint_path = f'checkpoints/{experiment_name}/{epoch+1}.pth.tar'
         save_checkpoint({

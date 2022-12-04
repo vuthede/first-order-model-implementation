@@ -47,3 +47,15 @@ CUDA_VISIBLE_DEVICES=5 taskset --cpu-list 20-30 python3 train_iris.py --viz_outp
                                       --num_kp 8\
                                       --using_first_order_motion 0\
                                       --using_thin_plate_spline_motion 1
+
+
+# exp_name=motion_iris_thin_plate_with_eyelid_motion
+# rm -rf logs/$exp_name
+# rm -rf checkpoints/$exp_name
+# rm -rf viz_$exp_name
+# CUDA_VISIBLE_DEVICES=5 taskset --cpu-list 20-30 python3 train_iris.py --viz_output viz_$exp_name\
+#                                       --exp_name $exp_name\
+#                                       --num_kp 8\
+#                                       --using_first_order_motion 0\
+#                                       --using_thin_plate_spline_motion 1\
+#                                       --estimate_lid_motion 1

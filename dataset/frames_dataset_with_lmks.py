@@ -61,6 +61,7 @@ class FramesDataset(Dataset):
     """
     # KEYPOINT_INDICES = [104, 105]  # Iris center
     KEYPOINT_INDICES = [0, 8, 16, 24, 32, 54, 104, 105]  # Boundary+nose points for control shape +  Iris center
+    KEYPOINT_INDICES_WITH_EYELID = list(range(66,74)) + list(range(76,83)) + [0, 8, 16, 24, 32, 54, 104, 105]  # Boundary+nose points for control shape +  Iris center
 
 
     def __init__(self, root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
@@ -118,6 +119,25 @@ class FramesDataset(Dataset):
             lmks_all = np.array(lmks_all, dtype='float32')
             return lmks_all
         return None
+    
+    def __load_lmks_withlid(self, path, img_size=256.0):
+        f_name_base = os.path.basename(path)
+        if self.is_train:
+            anno_f = f'{os.path.dirname(path).replace("train", "train_lmks_annotations")}'
+            anno_f = f'{anno_f}/{f_name_base}'.replace(".png", ".txt")
+            with open(anno_f, 'r') as f:
+                lines = f.readlines()
+                lmks_all = []
+                for line in lines:
+                    line = line.strip().rstrip()
+                    lmks = list(map(float, line.split(",")))
+                    lmks = np.array(lmks, dtype='float32')
+                    lmks = np.reshape(lmks, (-1, 2))[self.KEYPOINT_INDICES_WITH_EYELID]
+                    lmks = (lmks*2.0)/img_size - 1.0 # -1 -> 1
+                    lmks_all.append(lmks)
+            lmks_all = np.array(lmks_all, dtype='float32')
+            return lmks_all
+        return None
 
     def __getitem__(self, idx):
         if self.is_train and self.id_sampling:
@@ -137,6 +157,10 @@ class FramesDataset(Dataset):
             video_array = [img_as_float32(io.imread(os.path.join(path, frames[idx]))) for idx in frame_idx]
             lmks = self.__load_lmks(path)
             lmks = lmks[frame_idx]
+
+            lmks_lid = self.__load_lmks_withlid(path)
+            lmks_lid = lmks_lid[frame_idx]
+
         else:
             video_array = read_video(path, frame_shape=self.frame_shape)
             # if (video_array.shape != (20, 256, 256, 3)):
@@ -147,6 +171,10 @@ class FramesDataset(Dataset):
             video_array = video_array[frame_idx]
             lmks = self.__load_lmks(path)
             lmks = lmks[frame_idx]
+
+            lmks_lid = self.__load_lmks_withlid(path)
+            lmks_lid = lmks_lid[frame_idx]
+
         if self.transform is not None:
             video_array = self.transform(video_array)
 
@@ -157,8 +185,8 @@ class FramesDataset(Dataset):
 
             out['driving'] = driving.transpose((2, 0, 1))
             out['source'] = source.transpose((2, 0, 1))
-            out['lmks_source'] = {"value": lmks[0]}
-            out['lmks_driving'] = {"value": lmks[1]}
+            out['lmks_source'] = {"value": lmks[0], "value_witheyelid": lmks_lid[0]}
+            out['lmks_driving'] = {"value": lmks[1], "value_witheyelid": lmks_lid[1]}
 
         else:
             video = np.array(video_array, dtype='float32')

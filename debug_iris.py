@@ -19,18 +19,18 @@ device = 'cuda'
 def load_model(ckpt):
     checkpoint = torch.load(ckpt, map_location=device)
      # Model here
-    dense_motion_params = {"block_expansion":64, "max_features": 1024, "num_blocks":5, "scale_factor":0.25, "using_first_order_motion":0, "using_thin_plate_spline_motion":1}
+    dense_motion_params = {"block_expansion":64, "max_features": 1024, "num_blocks":5, "scale_factor":0.25, "using_first_order_motion":0, "using_thin_plate_spline_motion":1, "estimate_lid_motion":1}
     G = OcclusionAwareGenerator(num_channels=3, num_kp=8, block_expansion=64, max_features=512, num_down_blocks=2,
                  num_bottleneck_blocks=6, estimate_occlusion_map=True, dense_motion_params=dense_motion_params, estimate_jacobian=True)
     
-    G.load_state_dict(checkpoint["G_state_dict"], strict=True)
+    G.load_state_dict(checkpoint["G_state_dict"], strict=False)
     G = G.to(device)
     return G
 
 def draw_landmarks(img, lmks, color=(255,0,0)):
     img = np.ascontiguousarray(img)
     for a in lmks:
-        cv2.circle(img,(int(round(a[0])), int(round(a[1]))), 3, color, -1, lineType=cv2.LINE_AA)
+        cv2.circle(img,(int(round(a[0])), int(round(a[1]))), 2, color, -1, lineType=cv2.LINE_AA)
 
     return img
 
@@ -64,14 +64,7 @@ def visualize(x, x_prime, x_prime_hat, x_prime_hat1, kp_src, kp_driving, output_
             x3 = (np.transpose(x3, (2,3,0,1))*255.0).astype(np.uint8)
             x3 = x3.squeeze(-1)
 
-            # import pdb; pdb.set_trace()
-            # x4 = (np.transpose(x4, (2,3,0,1))*255.0).astype(np.uint8)
-            # x4 = x4.squeeze(-1)
-            x4 = (x4.squeeze(0)*255.0).astype(np.uint8)
-
-            ks = ks.squeeze(0)
-            kd = kd.squeeze(0)
-            
+            # import pdb; pdb.set_trace()driving_to_source_with_eyelid_motion_prediction
             ks = (ks+1) * np.array([w,h]) / 2.0
             kd = (kd+1) * np.array([w,h]) / 2.0
             # import pdb; pdb.set_trace();
@@ -130,6 +123,8 @@ def vis(x, prediction, kp_src, kp_driving):
             x3 = draw_landmarks(x3, kd, color=(0,255,255))
 
             img = np.hstack((x1, x3, *sdj_list, *smj_list))
+            # img = np.hstack((x1, x3))
+
             return img
 
 
@@ -137,9 +132,11 @@ def vis(x, prediction, kp_src, kp_driving):
 def synthize_kp_driving(kp_src):
     kp_driving = {}
     kp_driving["value"] =  kp_src["value"].clone()
+    kp_driving["value_witheyelid"] =  kp_src["value_witheyelid"].clone()
+
     # kp_driving["value"][:,:,0] = kp_driving["value"][:,:,0] +  np.random.uniform(-0.15, 0.15)
     # kp_driving["value"][:,:,1] = kp_driving["value"][:,:,1] +  np.random.uniform(-0.03, 0.03)
-    kp_driving["value"][:,-2:,0] = kp_driving["value"][:,-2:,0] +  np.random.uniform(-0.15, 0.15)
+    kp_driving["value"][:,-2:,0] = kp_driving["value"][:,-2:,0] +  np.random.uniform(-0.10, 0.10)
     kp_driving["value"][:,-2:,1] = kp_driving["value"][:,-2:,1] +  np.random.uniform(-0.03, 0.03)
     return kp_driving
 
@@ -151,7 +148,9 @@ if __name__ == '__main__':
     # ckpt = "checkpoints/motion_iris_fix_motion_equation/21.pth.tar"
     # ckpt = "checkpoints/motion_iris_fix_motion_test_zero_order_motion/20.pth.tar"
     # ckpt = "checkpoints/motion_iris_thin_plate_spline_motion/11.pth.tar"
-    ckpt = "checkpoints/motion_iris_thin_plate_spline_motion_more_control_points/16.pth.tar"
+    # ckpt = "checkpoints/motion_iris_thin_plate_spline_motion_more_control_points/16.pth.tar"
+    ckpt = "checkpoints/motion_iris_thin_plate_with_eyelid_motion/3.pth.tar"
+
 
     G = load_model(ckpt = ckpt)
     G.eval()
@@ -172,24 +171,42 @@ if __name__ == '__main__':
 
         # Fake image
         # src_path = "./trinh.png"
+        # src_path = "./de256.png"
         # src = cv2.imread(src_path)
         # src = cv2.cvtColor(src, cv2.COLOR_BGR2RGB)
         # src = cv2.resize(src, (256, 256)) #BxCxDxH,W
         # src = src/255.0
         # x  = np.transpose(src, (2,0,1)) # 3x256x256
-        # kp_src = {"value": torch.FloatTensor([[-0.2136181,-0.31389177],[0.373667,-0.22871798]])}
+        # # kp_src = {"value": torch.FloatTensor([[-0.2136181,-0.31389177],[0.373667,-0.22871798]])}
+        # kp_src = {"value": torch.FloatTensor(  [[-0.677761,   -0.12539172],
+        #                                 [-0.5658275,   0.54455435],
+        #                                 [ 0.03642654 , 0.8674201 ],
+        #                                 [ 0.4546075 ,  0.43742967],
+        #                                 [ 0.50706637, -0.19248897],
+        #                                 [ 0.02932119 , 0.11921871],
+        #                                 [-0.2807703 , -0.13634348],
+        #                                 [ 0.20768714 ,-0.14574659]])}
+
+
+      
 
 
 
         x = torch.FloatTensor(x)
         kp_src["value"] = torch.FloatTensor(kp_src["value"])
+        kp_src["value_witheyelid"] = torch.FloatTensor(kp_src["value_witheyelid"])
+
 
 
         x = x.to(device) 
         kp_src["value"] = kp_src["value"].to(device)
+        kp_src["value_witheyelid"] = kp_src["value_witheyelid"].to(device)
+
         
 
         kp_src["value"].unsqueeze_(0) 
+        kp_src["value_witheyelid"].unsqueeze_(0) 
+
         x.unsqueeze_(0) 
 
         
@@ -199,6 +216,9 @@ if __name__ == '__main__':
         for i in range(100):
             kp_driving = synthize_kp_driving(kp_src)
             kp_driving["value"] = kp_driving["value"].to(device)
+            kp_driving["value_witheyelid"] = kp_driving["value_witheyelid"].to(device)
+
+            
 
             prediction = G(source_image=x, kp_driving=kp_driving, kp_source=kp_src)
 
@@ -208,5 +228,5 @@ if __name__ == '__main__':
             print(img_out.shape)
             # out.write(img_out)
         
-        imageio.mimsave(f'gif_out/motion_iris_{index}.gif', img_list, fps=5)
-    
+        imageio.mimsave(f'gif_out/motion_iris_{index}.gif', img_list, fps=2)
+        # break
