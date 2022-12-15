@@ -8,6 +8,8 @@ import numpy as np
 from torch.utils.data import Dataset
 import pandas as pd
 from dataset.augmentation import AllAugmentationTransform
+# from augmentation import AllAugmentationTransform
+
 import glob
 import cv2
 
@@ -120,6 +122,42 @@ class FramesDataset(Dataset):
             return lmks_all
         return None
     
+    def __load_lmks_68(self, path, img_size=256.0):
+        f_name_base = os.path.basename(path)
+        if self.is_train:
+            anno_f = f'{os.path.dirname(path).replace("train", "train_lmks68_original_annotations")}'
+            anno_f = f'{anno_f}/{f_name_base}'.replace(".png", ".txt")
+            with open(anno_f, 'r') as f:
+                lines = f.readlines()
+                lmks_all = []
+                for line in lines:
+                    line = line.strip().rstrip()
+                    lmks = list(map(float, line.split(",")))
+                    lmks = np.array(lmks, dtype='float32')
+                    lmks = np.reshape(lmks, (-1, 2))
+                    lmks = (lmks*2.0)/img_size - 1.0 # -1 -> 1
+                    lmks_all.append(lmks)
+            lmks_all = np.array(lmks_all, dtype='float32')
+            return lmks_all
+        return None
+
+    def __load_gaze(self, path):
+        f_name_base = os.path.basename(path)
+        if self.is_train:
+            anno_f = f'{os.path.dirname(path).replace("train", "train_gaze_annotations")}'
+            anno_f = f'{anno_f}/{f_name_base}'.replace(".png", ".txt")
+            with open(anno_f, 'r') as f:
+                lines = f.readlines()
+                gaze_all = []
+                for line in lines:
+                    line = line.strip().rstrip()
+                    gaze = list(map(float, line.split(",")))
+                    gaze[0] = -gaze[0] 
+                    gaze = np.array(gaze, dtype='float32')
+                    gaze_all.append(gaze)
+            gaze_all = np.array(gaze_all, dtype='float32')
+            return gaze_all
+        return None
     def __load_lmks_withlid(self, path, img_size=256.0):
         f_name_base = os.path.basename(path)
         if self.is_train:
@@ -171,9 +209,15 @@ class FramesDataset(Dataset):
             video_array = video_array[frame_idx]
             lmks = self.__load_lmks(path)
             lmks = lmks[frame_idx]
-
             lmks_lid = self.__load_lmks_withlid(path)
             lmks_lid = lmks_lid[frame_idx]
+
+            gaze = self.__load_gaze(path)
+            gaze = gaze[frame_idx]
+
+            lmks68 = self.__load_lmks_68(path, 448)
+            lmks68 = lmks68[frame_idx]
+
 
         if self.transform is not None:
             video_array = self.transform(video_array)
@@ -187,6 +231,11 @@ class FramesDataset(Dataset):
             out['source'] = source.transpose((2, 0, 1))
             out['lmks_source'] = {"value": lmks[0], "value_witheyelid": lmks_lid[0]}
             out['lmks_driving'] = {"value": lmks[1], "value_witheyelid": lmks_lid[1]}
+            out['gaze_source'] = np.array(gaze[0]) 
+            out['gaze_driving'] = np.array(gaze[1])
+            out['lmks68_source'] = np.array(lmks68[0]) 
+            out['lmks68_driving'] = np.array(lmks68[1])
+
 
         else:
             video = np.array(video_array, dtype='float32')
@@ -212,23 +261,35 @@ if __name__ == '__main__':
 
     dataset1 = FramesDataset(root_dir, frame_shape=(256, 256, 3), id_sampling=False, is_train=True,
                  random_seed=0, pairs_list=None, augmentation_params=augmentation_params)
+    dataset1.KEYPOINT_INDICES = list(range(106))
+    dataset1.KEYPOINT_INDICES_WITH_EYELID = list(range(106))
     from tqdm import tqdm
     print(f'Len1 dataset :{len(dataset1)}')
-    for d in dataset1:
-        # print("hihi")
-        # print(d["driving"].shape, d["source"].shape, d["lmks_driving"].shape,d["lmks_source"].shape)
+    debug_dataset = "debug_dataset"
+    if not os.path.isdir(debug_dataset):
+        os.makedirs(debug_dataset)
 
+    i = 0
+    for d in dataset1:
+        i += 1
+        if i>=100:
+            break
         driving = (d["driving"].transpose(1,2,0)*255.0).astype(np.uint8)
         src = (d["source"].transpose(1,2,0)*255.0).astype(np.uint8)
         driving = np.ascontiguousarray(driving)
         src = np.ascontiguousarray(src)
-        driving = draw_landmarks(driving, (d["lmks_driving"]["value"]+1)*255/2 )
-        src = draw_landmarks(src, (d["lmks_source"]["value"]+1)*255/2)
-        src = draw_landmarks(src, (d["lmks_driving"]["value"]+1)*255/2, color=(0,0,255))
-        im = np.hstack((src, driving))
-        cv2.imwrite('both.png', im)
+        # driving = draw_landmarks(driving, (d["lmks_driving"]["value"]+1)*255/2 )
+        # src = draw_landmarks(src, (d["lmks_source"]["value"]+1)*255/2)
 
-        break
+        driving = draw_landmarks(driving, (d["lmks68_source"]+1)*256/2 )
+        src = draw_landmarks(src, (d["lmks68_driving"]+1)*256/2)
+        # src = draw_landmarks(src, (d["lmks_driving"]["value"]+1)*255/2, color=(0,0,255))
+        im = np.hstack((src, driving))
+        
+        cv2.imwrite(f'{debug_dataset}/{i}.png', im)
+
+        # cv2.imwrite('both.png', im)
+        # break
    
    
     # data = dataset[100]
